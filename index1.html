@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>Basic Timetable</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        :root{
+            --accent:#2b8cff;
+            --muted:#f3f5f7;
+            --cell-height:56px;
+            font-family:system-ui,-apple-system,Segoe UI,Roboto,"Helvetica Neue",Arial;
+        }
+        body{margin:24px;background:#fff;color:#111}
+        h1{margin:0 0 12px;font-size:20px}
+        .wrap{max-width:960px;margin:0 auto}
+        .controls{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+        button{background:var(--accent);color:#fff;border:none;padding:8px 12px;border-radius:6px;cursor:pointer}
+        button.secondary{background:#fff;color:var(--accent);border:1px solid var(--accent)}
+        table{width:100%;border-collapse:collapse;table-layout:fixed;background:#fff}
+        th,td{border:1px solid #e6e9ee;padding:0;overflow:hidden;vertical-align:top}
+        th{background:var(--muted);font-weight:600;color:#334;position:sticky;top:0;z-index:2;height:44px;text-align:center}
+        .time-col{width:84px;background:#fbfdff;text-align:center;font-size:13px}
+        td{height:var(--cell-height);cursor:pointer}
+        .slot{display:flex;align-items:center;justify-content:center;height:100%;padding:6px;font-size:13px;line-height:1.1;border-left:6px solid transparent}
+        .slot.empty{color:#9aa7b2}
+        .slot.event{background:linear-gradient(135deg,rgba(43,140,255,0.12),rgba(43,140,255,0.06));border-left-color:var(--accent);color:#023b8a}
+        .slot.small{font-size:12px;padding:4px}
+        @media (max-width:640px){
+            .time-col{display:none}
+            th:first-child{display:none}
+            td{font-size:12px}
+        }
+        .hint{font-size:13px;color:#556;margin-left:8px}
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <h1>Basic Timetable</h1>
+        <div class="controls">
+            <button id="clearAll" class="secondary">Clear all</button>
+            <button id="export">Export JSON</button>
+            <span class="hint">Click a cell to add/edit; double-click to clear</span>
+        </div>
+
+        <table id="timetable" aria-label="Weekly timetable">
+            <thead>
+                <tr>
+                    <th></th>
+                    <th>Monday</th>
+                    <th>Tuesday</th>
+                    <th>Wednesday</th>
+                    <th>Thursday</th>
+                    <th>Friday</th>
+                </tr>
+            </thead>
+            <tbody id="tbody">
+                <!-- rows injected by JS -->
+            </tbody>
+        </table>
+    </div>
+
+    <script>
+        (function(){
+            const days = ['monday','tuesday','wednesday','thursday','friday'];
+            const times = [];
+            for(let h=8; h<=17; h++) times.push((h<10?'0':'')+h+':00');
+
+            const tbody = document.getElementById('tbody');
+            const storageKey = 'basic-timetable-v1';
+
+            function loadData(){
+                try{
+                    return JSON.parse(localStorage.getItem(storageKey) || '{}');
+                }catch(e){ return {}; }
+            }
+            function saveData(data){ localStorage.setItem(storageKey, JSON.stringify(data)); }
+
+            function render(){
+                const data = loadData();
+                tbody.innerHTML = '';
+                times.forEach(time=>{
+                    const tr = document.createElement('tr');
+
+                    const th = document.createElement('th');
+                    th.className = 'time-col';
+                    th.textContent = time;
+                    tr.appendChild(th);
+
+                    days.forEach(day=>{
+                        const td = document.createElement('td');
+                        const div = document.createElement('div');
+                        div.className = 'slot empty';
+                        div.contentEditable = false;
+                        const key = day + '|' + time;
+                        const text = data[key] || '';
+                        if(text){
+                            div.className = 'slot event';
+                            div.textContent = text;
+                        } else {
+                            div.textContent = '';
+                            const span = document.createElement('span');
+                            span.textContent = '+';
+                            span.style.opacity=0.45;
+                            div.appendChild(span);
+                        }
+                        // click to edit
+                        div.addEventListener('click', ()=>{
+                            const current = data[key] || '';
+                            const input = prompt('Enter event for ' + capitalize(day) + ' ' + time, current);
+                            if(input === null) return;
+                            if(input.trim()){
+                                data[key] = input.trim();
+                            } else {
+                                delete data[key];
+                            }
+                            saveData(data);
+                            render();
+                        });
+                        // dblclick to clear quickly
+                        div.addEventListener('dblclick', (e)=>{
+                            e.stopPropagation();
+                            if(data[key]){ if(confirm('Clear "'+data[key]+'"?')){ delete data[key]; saveData(data); render(); } }
+                        });
+
+                        td.appendChild(div);
+                        tr.appendChild(td);
+                    });
+
+                    tbody.appendChild(tr);
+                });
+            }
+
+            function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+
+            document.getElementById('clearAll').addEventListener('click', ()=>{
+                if(confirm('Clear all timetable entries?')){
+                    localStorage.removeItem(storageKey);
+                    render();
+                }
+            });
+
+            document.getElementById('export').addEventListener('click', ()=>{
+                const data = loadData();
+                const blob = new Blob([JSON.stringify(data, null, 2)], {type:'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url; a.download = 'timetable.json';
+                document.body.appendChild(a); a.click(); a.remove();
+                URL.revokeObjectURL(url);
+            });
+
+            render();
+        })();
+    </script>
+</body>
+</html>
